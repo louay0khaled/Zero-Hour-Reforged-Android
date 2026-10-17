@@ -1550,10 +1550,24 @@ if(ZH_PLATFORM_POSIX)
   if(APPLE AND CMAKE_OSX_SYSROOT)
     set(FFMPEG_POSIX_ENV "SDKROOT=${CMAKE_OSX_SYSROOT}")
   endif()
-  # FFmpeg's own configure picks the host's architecture, so a build for another one (x86_64 on Apple
-  # Silicon, run under Rosetta: E1's architecture axis) names it.  One at a time: configure builds one.
+  # FFmpeg's own configure picks the host's architecture, so a build for another one names it.
+  # One at a time: configure builds one. Android also needs its target OS and NDK sysroot explicitly:
+  # this script invokes FFmpeg's configure directly, outside CMake's compiler-driver wrapper.
   set(FFMPEG_POSIX_ARCH "")
-  if(APPLE AND CMAKE_OSX_ARCHITECTURES)
+  set(FFMPEG_POSIX_OS "")
+  if(ANDROID)
+    set(FFMPEG_POSIX_ARCH aarch64)
+    set(FFMPEG_POSIX_OS android)
+    if(CMAKE_C_COMPILER_TARGET)
+      set(FFMPEG_ANDROID_TARGET "${CMAKE_C_COMPILER_TARGET}")
+    else()
+      set(FFMPEG_ANDROID_TARGET "aarch64-linux-android${CMAKE_SYSTEM_VERSION}")
+    endif()
+    if(NOT CMAKE_SYSROOT)
+      message(FATAL_ERROR "Android FFmpeg cross-build requires the NDK CMAKE_SYSROOT.")
+    endif()
+    set(FFMPEG_POSIX_CFLAGS "--target=${FFMPEG_ANDROID_TARGET} --sysroot=${CMAKE_SYSROOT}")
+  elseif(APPLE AND CMAKE_OSX_ARCHITECTURES)
     list(LENGTH CMAKE_OSX_ARCHITECTURES FFMPEG_ARCH_COUNT)
     if(NOT FFMPEG_ARCH_COUNT EQUAL 1)
       message(FATAL_ERROR "FFmpeg builds one architecture at a time; CMAKE_OSX_ARCHITECTURES is '${CMAKE_OSX_ARCHITECTURES}'.")
@@ -1570,7 +1584,7 @@ if(ZH_PLATFORM_POSIX)
     COMMAND ${CMAKE_COMMAND} -E env ${FFMPEG_POSIX_ENV}
             ${CMAKE_CURRENT_SOURCE_DIR}/Tools/ffmpeg-build-posix.sh ${FFMPEG_TARBALL}
             ${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-work ${FFMPEG_POSIX} ${CMAKE_C_COMPILER} "${FFMPEG_POSIX_CFLAGS}"
-            "${FFMPEG_POSIX_ARCH}"
+            "${FFMPEG_POSIX_ARCH}" "${FFMPEG_POSIX_OS}"
     DEPENDS ${FFMPEG_TARBALL} ${CMAKE_CURRENT_SOURCE_DIR}/Tools/ffmpeg-build-posix.sh
     COMMENT "Building FFmpeg 8.1.2's Bink decoders for the movies (V1)"
     VERBATIM)
