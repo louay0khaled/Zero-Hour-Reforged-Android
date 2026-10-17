@@ -1,10 +1,11 @@
 name: Android ARM64 build
 
 on:
+  # Build main directly; feature branches are validated by pull_request below.
+  # Avoid running the same expensive native build twice for each PR commit.
   push:
     branches:
       - main
-      - "android/**"
   pull_request:
     branches:
       - main
