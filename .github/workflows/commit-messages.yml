@@ -34,7 +34,7 @@ jobs:
         run: |
           set -o pipefail
           {
-          pattern='^((feat|fix|perf|build|refactor|test)\([a-z0-9._-]+\)|ci(\([a-z0-9._-]+\))?|docs(\([a-z0-9._-]+\))?): [^ ]'
+          pattern='^((feat|fix|perf|build|refactor|test|style)\([a-z0-9._-]+\)|ci(\([a-z0-9._-]+\))?|docs(\([a-z0-9._-]+\))?): [^ ]'
           status=0
           while IFS= read -r line; do
             sha=${line%% *}
@@ -46,7 +46,7 @@ jobs:
               continue
             fi
             if ! printf '%s' "$subject" | grep -Eq "$pattern"; then
-              echo "::error::$sha \"$subject\" should read type(scope): summary, with a type of feat, fix, perf, build, refactor, test, ci or docs. See CONTRIBUTING.md."
+              echo "::error::$sha \"$subject\" should read type(scope): summary, with a type of feat, fix, perf, build, refactor, test, style, ci or docs. See CONTRIBUTING.md."
               status=1
             elif [ ${#subject} -gt 72 ]; then
               echo "::error::$sha \"$subject\" is ${#subject} characters; keep the first line under 72."
