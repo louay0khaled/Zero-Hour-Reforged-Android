@@ -873,8 +873,8 @@ add_subdirectory(${LIBSRC}/GameSpy ${CMAKE_CURRENT_BINARY_DIR}/gamespy)
 # They are built by default all the same, so that a break shows up in the build that caused it
 # rather than in the first task to link them.
 if(ZH_PLATFORM_POSIX)
-  # SDL3 static, and only the subsystems decision 3 uses.  On: video (window, events, message boxes),
-  # GPU (the renderer - Metal on macOS, Vulkan on Linux) and dialog (the first launch's folder chooser,
+  # SDL3 platform library, and only the subsystems decision 3 uses. On: video (window and events),
+  # GPU (the renderer - Metal on macOS, Vulkan on Linux/Android) and desktop dialog (the first launch's folder chooser,
   # PosixMain.cpp: NSOpenPanel on macOS, the portal or zenity on Linux; with it off, SDL answers every
   # dialog at once with "not built with dialog support", and the chooser quit before showing anything).
   # Off: audio (miniaudio has that job), render (SDL's 2D renderer; D4 uses the GPU API directly),
@@ -895,6 +895,7 @@ if(ZH_PLATFORM_POSIX)
     set(SDL_STATIC OFF CACHE BOOL "" FORCE)
     # The desktop install-root chooser uses SDL's file dialog; Android gets a native picker later.
     set(SDL_DIALOG OFF CACHE BOOL "" FORCE)
+    set(SDL_VULKAN ON CACHE BOOL "" FORCE)
     set(ZH_SDL3_TARGET SDL3::SDL3-shared)
   else()
     set(SDL_SHARED OFF CACHE BOOL "" FORCE)
