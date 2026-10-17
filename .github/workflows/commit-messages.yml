@@ -14,6 +14,19 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Initialize diagnostic logs
+        shell: bash
+        run: |
+          mkdir -p artifacts/ci-logs
+          {
+            echo "Workflow: ${GITHUB_WORKFLOW}"
+            echo "Run ID: ${GITHUB_RUN_ID}"
+            echo "Run attempt: ${GITHUB_RUN_ATTEMPT}"
+            echo "Commit: ${GITHUB_SHA}"
+            echo "Started UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            git --version
+          } | tee artifacts/ci-logs/run-metadata.txt
+
       - name: Every commit reads type(scope) summary
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
@@ -37,3 +50,26 @@ jobs:
             status=1
           done < <(git log --merges --format='%h %s' "$BASE..$HEAD")
           exit $status
+          } 2>&1 | tee artifacts/ci-logs/commit-message-check.log
+
+      - name: Write diagnostic summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Commit message workflow diagnostics"
+            echo
+            echo "- Commit: `$GITHUB_SHA`"
+            echo "- Run: `$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID`"
+            echo "- Attempt: `$GITHUB_RUN_ATTEMPT`"
+            echo "- Full validation output is in the diagnostic artifact."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload workflow logs (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: commit-message-ci-logs-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: artifacts/ci-logs/
+          if-no-files-found: warn
+          retention-days: 30
