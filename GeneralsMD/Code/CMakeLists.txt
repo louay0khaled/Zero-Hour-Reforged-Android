@@ -25,6 +25,10 @@ project(GeneralsMD CXX C)
 # with an #error naming what it lacks (cpudetect.cpp does this), which is louder and more useful than
 # refusing to configure.
 if(ANDROID)
+  # This port is deliberately ARM64-only; fail early rather than silently producing an unsupported ABI.
+  if(NOT ANDROID_ABI STREQUAL "arm64-v8a")
+    message(FATAL_ERROR "Android builds support arm64-v8a only; got ANDROID_ABI='${ANDROID_ABI}'.")
+  endif()
   # Android uses the existing SDL3/POSIX device layer, but has its own lifecycle, storage and
   # Vulkan loader. Keep it distinct from desktop Linux so no X11/Wayland assumptions leak in.
   set(ZH_PLATFORM_ANDROID TRUE)
