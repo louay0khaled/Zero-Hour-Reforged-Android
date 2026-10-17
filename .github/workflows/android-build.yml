@@ -145,9 +145,9 @@ jobs:
           {
             echo "## Android ARM64 CI diagnostics"
             echo
-            echo "- Commit: `$GITHUB_SHA`"
-            echo "- Run: `$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID`"
-            echo "- Attempt: `$GITHUB_RUN_ATTEMPT`"
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "- Attempt: $GITHUB_RUN_ATTEMPT"
             echo "- Logs and native diagnostics are uploaded as an artifact even when the build fails."
             if [ -s android/app/build/outputs/apk/debug/app-debug.apk ]; then
               echo "- APK file exists: yes"
