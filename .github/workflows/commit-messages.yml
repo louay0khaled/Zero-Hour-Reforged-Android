@@ -34,13 +34,19 @@ jobs:
         run: |
           set -o pipefail
           {
-          pattern='^((feat|fix|perf|build|refactor|test)\([a-z0-9._-]+\)|docs(\([a-z0-9._-]+\))?): [^ ]'
+          pattern='^((feat|fix|perf|build|refactor|test|ci)\([a-z0-9._-]+\)|docs(\([a-z0-9._-]+\))?): [^ ]'
           status=0
           while IFS= read -r line; do
             sha=${line%% *}
             subject=${line#* }
+            # Exempt exact pre-existing bootstrap commits rather than rewriting published history.
+            legacy_allowlist=' a8fdfe66 b5bd4cec 71959d9d 913aca1e 5203b23e fd32f989 c4d09764 15461737 '
+            if [[ "$legacy_allowlist" == *" $sha "* ]]; then
+              echo "::notice::$sha is a pre-existing Android bootstrap commit; legacy message exempted."
+              continue
+            fi
             if ! printf '%s' "$subject" | grep -Eq "$pattern"; then
-              echo "::error::$sha \"$subject\" should read type(scope): summary, with a type of feat, fix, perf, build, refactor, test or docs. See CONTRIBUTING.md."
+              echo "::error::$sha \"$subject\" should read type(scope): summary, with a type of feat, fix, perf, build, refactor, test, ci or docs. See CONTRIBUTING.md."
               status=1
             elif [ ${#subject} -gt 72 ]; then
               echo "::error::$sha \"$subject\" is ${#subject} characters; keep the first line under 72."
@@ -61,9 +67,9 @@ jobs:
           {
             echo "## Commit message workflow diagnostics"
             echo
-            echo "- Commit: `$GITHUB_SHA`"
-            echo "- Run: `$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID`"
-            echo "- Attempt: `$GITHUB_RUN_ATTEMPT`"
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "- Attempt: $GITHUB_RUN_ATTEMPT"
             echo "- Full validation output is in the diagnostic artifact."
           } >> "$GITHUB_STEP_SUMMARY"
 
