@@ -151,7 +151,7 @@ jobs:
             echo "=== Consolidated error/failure index ==="
             echo "Generated UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             echo "Source files: Gradle, vendor, toolchain, and collected native logs"
-            for file in artifacts/ci-logs/gradle-assembleDebug.log artifacts/ci-logs/vendor.log artifacts/ci-logs/android-toolchain.log artifacts/ci-logs/native/*; do
+            for file in artifacts/ci-logs/gradle-assembleDebug.log artifacts/ci-logs/ninja-continue.log artifacts/ci-logs/vendor.log artifacts/ci-logs/android-toolchain.log artifacts/ci-logs/native/*; do
               [ -f "$file" ] || continue
               echo
               echo "--- $file ---"
