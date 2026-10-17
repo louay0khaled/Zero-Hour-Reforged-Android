@@ -36,7 +36,9 @@
 
 #include <dlfcn.h>
 #include <stdint.h>
+#if !defined(__ANDROID__)
 #include <execinfo.h>
+#endif
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -69,6 +71,13 @@ static void formatFrame( void *address, char *line, size_t lineSize )
 
 void FillStackAddresses( void **addresses, unsigned int count, unsigned int skip )
 {
+#if defined(__ANDROID__)
+	// Android bionic has no execinfo backtrace API. Leave an explicit empty trace rather
+	// than relying on an unsupported symbol or returning uninitialised addresses.
+	(void)skip;
+	for (unsigned int i = 0; i < count; ++i)
+		addresses[ i ] = NULL;
+#else
 	void *frames[ MAX_FRAMES ];
 	// one more than asked, because this function is itself a frame
 	unsigned int wanted = count + skip + 1;
@@ -80,10 +89,20 @@ void FillStackAddresses( void **addresses, unsigned int count, unsigned int skip
 		const unsigned int from = i + skip + 1;
 		addresses[ i ] = (from < (unsigned int)got) ? frames[ from ] : NULL;
 	}
+#endif
 }
 
 void StackDumpFromAddresses( void **addresses, unsigned int count, void (*callback)( const char * ) )
 {
+#if defined(__ANDROID__)
+	(void)addresses;
+	(void)count;
+	const char *message = "Stack dump unavailable on Android\\n";
+	if (callback != NULL)
+		callback( message );
+	else
+		fputs( message, stderr );
+#else
 	if (callback == NULL)
 	{
 		unsigned int n = 0;
@@ -97,8 +116,9 @@ void StackDumpFromAddresses( void **addresses, unsigned int count, void (*callba
 	{
 		formatFrame( addresses[ i ], line, sizeof( line ) );
 		callback( line );
-		callback( "\n" );		// WriteStackLine's two calls, so a callback sees the same pieces on both
+		callback( "\\n" );	// WriteStackLine's two calls, so a callback sees the same pieces on both
 	}
+#endif
 }
 
 void StackDump( void (*callback)( const char * ) )
