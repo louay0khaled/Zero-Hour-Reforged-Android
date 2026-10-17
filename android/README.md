@@ -9,7 +9,7 @@ repository.
 ## Prerequisites
 
 - Android SDK with platform 35 and Build Tools installed
-- Android NDK **28.2.13676358** (r26c)
+- Android NDK **28.2.13676358** (r28c)
 - CMake 3.22.1
 - JDK 17 and Gradle 8.9 (Android Gradle Plugin 8.7.3)
 
