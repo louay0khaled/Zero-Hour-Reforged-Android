@@ -265,29 +265,36 @@ void Sdl_Creation_Log(const char *what, double started_ms, double took_ms, const
 
 void Sdl_Creation_Log_Trace(const char *what)
 {
-	void *frames[12];
-	const int count = backtrace(frames, 12);
-	std::string line = std::string("PosixDevice9 create: trace ") + what + ":";
-	for (int i = 1; i < count; ++i) {
-		Dl_info info;
-		const char *name = "?";
-		char *demangled = NULL;
-		if (dladdr(frames[i], &info) != 0 && info.dli_sname != NULL) {
-			int status = 0;
-			demangled = abi::__cxa_demangle(info.dli_sname, NULL, NULL, &status);
-			name = (demangled != NULL && status == 0) ? demangled : info.dli_sname;
-		}
-		// The function's name without its parameters: the line is for reading.
-		std::string shown(name);
-		const size_t parameters = shown.find('(');
-		if (parameters != std::string::npos) {
-			shown.erase(parameters);
-		}
-		line += (i == 1) ? " " : " <- ";
-		line += shown;
-		free(demangled);
-	}
+#if defined(__ANDROID__)
+	// Android's NDK does not expose execinfo's backtrace() API. Keep the diagnostic hook harmless
+	// and explicit on Android rather than making the entire native engine fail to compile.
+	const std::string line = std::string("PosixDevice9 create: trace ") + what + ": stack trace unavailable on Android";
 	Sdl_Creation_Log_Line(line.c_str());
+#else
+		void *frames[12];
+		const int count = backtrace(frames, 12);
+		std::string line = std::string("PosixDevice9 create: trace ") + what + ":";
+		for (int i = 1; i < count; ++i) {
+			Dl_info info;
+			const char *name = "?";
+			char *demangled = NULL;
+			if (dladdr(frames[i], &info) != 0 && info.dli_sname != NULL) {
+				int status = 0;
+				demangled = abi::__cxa_demangle(info.dli_sname, NULL, NULL, &status);
+				name = (demangled != NULL && status == 0) ? demangled : info.dli_sname;
+			}
+			// The function's name without its parameters: the line is for reading.
+			std::string shown(name);
+			const size_t parameters = shown.find('(');
+			if (parameters != std::string::npos) {
+				shown.erase(parameters);
+			}
+			line += (i == 1) ? " " : " <- ";
+			line += shown;
+			free(demangled);
+		}
+		Sdl_Creation_Log_Line(line.c_str());
+#endif
 }
 
 void Sdl_Creation_Log_Flush()
