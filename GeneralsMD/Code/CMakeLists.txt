@@ -252,6 +252,11 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
   # compile error.  dettrig.h went to integer arithmetic over a committed table for exactly this
   # reason; this is the other half of the same promise, and E1 is the test that holds it.
   add_compile_options(-ffp-contract=off)
+  # Keep fast-math disabled for every Android translation unit, not just the entry-point library:
+  # the simulation code is spread across several static libraries and must share one FP contract.
+  if(ZH_PLATFORM_ANDROID)
+    add_compile_options(-fno-fast-math)
+  endif()
   # -fno-strict-aliasing: 2003 C++.  The .big and .w3d readers cast a byte buffer to a struct
   # pointer and read through it, which the standard does not allow and an optimiser is entitled to
   # act on.  MSVC does no type-based alias analysis, so this code has never been compiled by
@@ -1869,8 +1874,6 @@ if(ZH_PLATFORM_POSIX)
     find_library(ZH_ANDROID_VULKAN_LIB vulkan REQUIRED)
     target_link_libraries(generals PRIVATE sdldevice installroot
       ${ZH_ANDROID_LIB} ${ZH_ANDROID_LOG_LIB} ${ZH_ANDROID_VULKAN_LIB})
-    # Preserve the simulation's cross-platform floating-point contract on ARM64.
-    target_compile_options(generals PRIVATE -ffp-contract=off -fno-fast-math)
   else()
     add_executable(generals ${CMAKE_CURRENT_SOURCE_DIR}/Main/PosixMain.cpp)
     set_target_properties(generals PROPERTIES CXX_STANDARD 17)
