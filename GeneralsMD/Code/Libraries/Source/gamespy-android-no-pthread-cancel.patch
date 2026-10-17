@@ -1,7 +1,7 @@
 diff --git a/src/common/linux/gsthreadlinux.c b/src/common/linux/gsthreadlinux.c
 --- a/src/common/linux/gsthreadlinux.c
 +++ b/src/common/linux/gsthreadlinux.c
-@@ -65,17 +65,23 @@ int gsiStartThread(GSThreadFunc func, gsi_u32 theStackSize, void* arg, GSIThreadID* id)
+@@ -67,13 +67,20 @@ int gsiStartThread(GSThreadFunc func, gsi_u32 theStackSize, void* arg, GSIThreadID* id)
  void gsiCancelThread(GSIThreadID id)
  {
      //should i destroy the attributes here?
@@ -10,7 +10,7 @@ diff --git a/src/common/linux/gsthreadlinux.c b/src/common/linux/gsthreadlinux.c
 +#if !defined(__ANDROID__)
      if (pthread_cancel(id.thread) != PTHREAD_NO_ERROR) {
          //there was an error - how should we handle these? or should we?
-         gsDebugFormat(GSIDebugCat_Common, GSIDebugType_Misc, GSIDebugLevel_WarmError, "Failed to cancel thread\\r\\n");
+         gsDebugFormat(GSIDebugCat_Common, GSIDebugType_Misc, GSIDebugLevel_WarmError, "Failed to cancel thread\r\n");
      }
      //free up memory and set to NULL
  
