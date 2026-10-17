@@ -66,7 +66,7 @@ jobs:
             set +o pipefail
             yes | "$SDKMANAGER" --licenses
             set -o pipefail
-            "$SDKMANAGER" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
+            "$SDKMANAGER" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.31.6"
             "$SDKMANAGER" --list_installed
             java -version
           } 2>&1 | tee artifacts/ci-logs/android-toolchain.log
