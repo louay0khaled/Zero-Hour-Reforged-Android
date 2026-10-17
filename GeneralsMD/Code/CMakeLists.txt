@@ -875,6 +875,12 @@ set(GS_SECURESECONNECT  OFF CACHE BOOL "" FORCE)
 set(GS_BUILD_TESTS      OFF CACHE BOOL "" FORCE)
 set(GS_INCLUDE_VOICE    OFF CACHE BOOL "" FORCE)
 add_subdirectory(${LIBSRC}/GameSpy ${CMAKE_CURRENT_BINARY_DIR}/gamespy)
+# Android links the engine as a shared object. GameSpy's static archive otherwise contains
+# non-PIC AArch64 relocations, which lld rejects when producing libGeneralsReforged.so.
+# Keep this target-specific so desktop builds retain their existing flags and behaviour.
+if(ANDROID)
+  set_target_properties(gamespy PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
 
 # ---- SDL3 and miniaudio: the platform layer off Windows (decision 3) -------------------------------
 # Both are fetched by Tools/vendor.sh and neither is fetched on Windows, which keeps Win32Device and
