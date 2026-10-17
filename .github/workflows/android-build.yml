@@ -13,9 +13,7 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: android-build-${{ github.ref }}
-  cancel-in-progress: true
+# Do not cancel earlier runs: each attempt must finish and upload diagnostics, even after newer commits.
 
 jobs:
   assemble-arm64:
