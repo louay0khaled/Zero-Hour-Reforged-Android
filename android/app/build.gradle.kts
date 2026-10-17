@@ -28,7 +28,7 @@ tasks.configureEach {
 android {
     namespace = "org.libsdl.app"
     compileSdk = 35
-    ndkVersion = "26.2.11394342" // Android NDK r26c
+    ndkVersion = "28.2.13676358" // Android NDK r28c (SDL3 3.4.16 baseline)
 
     defaultConfig {
         applicationId = "org.reforged.generals"
