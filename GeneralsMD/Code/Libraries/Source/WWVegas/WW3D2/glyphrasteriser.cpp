@@ -31,7 +31,7 @@
 #include FT_TRUETYPE_TABLES_H
 #include FT_TRUETYPE_TAGS_H
 
-#if !defined(__APPLE__) || defined(ZH_GLYPHS_USE_FONTCONFIG)
+#if (!defined(__APPLE__) && !defined(__ANDROID__)) || defined(ZH_GLYPHS_USE_FONTCONFIG)
 #include <fontconfig/fontconfig.h>
 #define ZH_GLYPHS_FONTCONFIG 1
 #endif
@@ -270,6 +270,42 @@ bool resolve( const char *face, bool bold, std::string &path, bool &fileIsBold, 
 #if defined(ZH_GLYPHS_FONTCONFIG)
 	metricsFace = s.gdiMetrics;
 	return fontconfigFile( s.linuxFamily, bold, path, fileIsBold );
+#elif defined(__ANDROID__)
+	// Android does not ship fontconfig or the macOS font directory. Use system fonts only;
+	// this is a mobile fallback, not a claim of GDI metric equivalence with desktop fonts.
+	metricsFace = NULL;
+	const char *directory = "/system/fonts/";
+	const char *regular = "Roboto-Regular.ttf";
+	const char *boldFace = "Roboto-Bold.ttf";
+	if (s.linuxFamily != NULL && strcmp( s.linuxFamily, "Liberation Serif" ) == 0)
+	{
+		regular = "NotoSerif-Regular.ttf";
+		boldFace = "NotoSerif-Bold.ttf";
+	}
+	else if (s.linuxFamily != NULL && strcmp( s.linuxFamily, "Liberation Mono" ) == 0)
+	{
+		regular = "DroidSansMono.ttf";
+		boldFace = regular; // A fixed-width system font is safer than assuming a bold mono face exists.
+	}
+	else if (s.linuxFamily != NULL && strcmp( s.linuxFamily, "DejaVu Sans" ) == 0)
+	{
+		regular = "NotoSans-Regular.ttf";
+		boldFace = "NotoSans-Bold.ttf";
+	}
+	const std::string boldPath = std::string( directory ) + boldFace;
+	if (bold && fileExists( boldPath.c_str() ))
+	{
+		path = boldPath;
+		fileIsBold = true;
+		return true;
+	}
+	path = std::string( directory ) + regular;
+	fileIsBold = false;
+	if (fileExists( path.c_str() ))
+		return true;
+	// Last-resort fallback across Android releases with different system font packages.
+	path = std::string( directory ) + "Roboto-Regular.ttf";
+	return fileExists( path.c_str() );
 #else
 	const char *directory = "/System/Library/Fonts/Supplemental/";
 	if (bold && s.macBold != NULL && fileExists( (std::string( directory ) + s.macBold).c_str() ))
