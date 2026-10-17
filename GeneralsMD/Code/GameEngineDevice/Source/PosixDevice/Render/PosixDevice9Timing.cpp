@@ -42,9 +42,11 @@
 
 #include <SDL3/SDL.h>
 
+#if !defined(__ANDROID__)
 #include <cxxabi.h>
 #include <dlfcn.h>
 #include <execinfo.h>
+#endif
 #include <mutex>
 #include <string>
 
@@ -271,29 +273,29 @@ void Sdl_Creation_Log_Trace(const char *what)
 	const std::string line = std::string("PosixDevice9 create: trace ") + what + ": stack trace unavailable on Android";
 	Sdl_Creation_Log_Line(line.c_str());
 #else
-		void *frames[12];
-		const int count = backtrace(frames, 12);
-		std::string line = std::string("PosixDevice9 create: trace ") + what + ":";
-		for (int i = 1; i < count; ++i) {
-			Dl_info info;
-			const char *name = "?";
-			char *demangled = NULL;
-			if (dladdr(frames[i], &info) != 0 && info.dli_sname != NULL) {
-				int status = 0;
-				demangled = abi::__cxa_demangle(info.dli_sname, NULL, NULL, &status);
-				name = (demangled != NULL && status == 0) ? demangled : info.dli_sname;
-			}
-			// The function's name without its parameters: the line is for reading.
-			std::string shown(name);
-			const size_t parameters = shown.find('(');
-			if (parameters != std::string::npos) {
-				shown.erase(parameters);
-			}
-			line += (i == 1) ? " " : " <- ";
-			line += shown;
-			free(demangled);
+	void *frames[12];
+	const int count = backtrace(frames, 12);
+	std::string line = std::string("PosixDevice9 create: trace ") + what + ":";
+	for (int i = 1; i < count; ++i) {
+		Dl_info info;
+		const char *name = "?";
+		char *demangled = NULL;
+		if (dladdr(frames[i], &info) != 0 && info.dli_sname != NULL) {
+			int status = 0;
+			demangled = abi::__cxa_demangle(info.dli_sname, NULL, NULL, &status);
+			name = (demangled != NULL && status == 0) ? demangled : info.dli_sname;
 		}
-		Sdl_Creation_Log_Line(line.c_str());
+		// The function's name without its parameters: the line is for reading.
+		std::string shown(name);
+		const size_t parameters = shown.find('(');
+		if (parameters != std::string::npos) {
+			shown.erase(parameters);
+		}
+		line += (i == 1) ? " " : " <- ";
+		line += shown;
+		free(demangled);
+	}
+	Sdl_Creation_Log_Line(line.c_str());
 #endif
 }
 
