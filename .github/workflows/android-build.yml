@@ -130,6 +130,17 @@ jobs:
             fi
           done
           {
+            echo "=== Consolidated error/failure index ==="
+            echo "Generated UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "Source files: Gradle, vendor, toolchain, and collected native logs"
+            for file in artifacts/ci-logs/gradle-assembleDebug.log artifacts/ci-logs/vendor.log artifacts/ci-logs/android-toolchain.log artifacts/ci-logs/native/*; do
+              [ -f "$file" ] || continue
+              echo
+              echo "--- $file ---"
+              grep -nEi '(^|[[:space:]])(error:|fatal error:)|CMake Error|FAILED|What went wrong|Exception|undefined reference|ld\.lld: error|clang: error|ninja: build stopped|Could not (find|resolve|create)|No such file or directory|BUILD FAILED|FAILURE: Build failed' "$file" || true
+            done
+          } > artifacts/ci-logs/error-index.txt
+          {
             echo "## Android ARM64 CI diagnostics"
             echo
             echo "- Commit: `$GITHUB_SHA`"
