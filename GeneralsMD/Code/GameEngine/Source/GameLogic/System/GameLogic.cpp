@@ -1169,8 +1169,8 @@ void GameLogic::startNewGame( Bool loadingSaveGame )
 	m_kickVoteYesMask = 0;
 
 	#ifdef DUMP_PERF_STATS
-	__int64 startTime64;
-	__int64 endTime64,freq64;
+	Int64 startTime64;
+	Int64 endTime64,freq64;
 	GetPrecisionTimerTicksPerSec(&freq64);
 	GetPrecisionTimer(&startTime64);
 	#endif
@@ -3482,8 +3482,8 @@ static void unitTimings(void)
 
 	static Int side = 0;
 
-	static __int64 startTime64;
-	static __int64 endTime64,freq64;
+	static Int64 startTime64;
+	static Int64 endTime64,freq64;
 	static int drawCallTotal;
 	static enum { LOGIC, NO_PARTICLES, NO_SPAWN, ALL} mode;
 	static double timeAll, timeAllNoAnim, timeNoPart, timeNoSpawn, timeLogic, timeLogicNoAnim;
@@ -3910,10 +3910,10 @@ DECLARE_PERF_TIMER(GameLogic_update_normal)
 DECLARE_PERF_TIMER(GameLogic_update_sleepy)
 
 #ifdef DUMP_PERF_STATS
-extern __int64 Total_Get_Texture_Time;
-extern __int64 Total_Get_HAnim_Time;
-extern __int64 Total_Create_Render_Obj_Time;
-extern __int64 Total_Load_3D_Assets;
+extern Int64 Total_Get_Texture_Time;
+extern Int64 Total_Get_HAnim_Time;
+extern Int64 Total_Create_Render_Obj_Time;
+extern Int64 Total_Load_3D_Assets;
 #endif
 
 // ------------------------------------------------------------------------------------------------
@@ -4674,7 +4674,7 @@ void GameLogic::update( void )
 
 	#ifdef DUMP_PERF_STATS
 		char Buf[1024];
-		__int64 freq64;
+		Int64 freq64;
 		GetPrecisionTimerTicksPerSec(&freq64);
 
 		sprintf(Buf,"Texture=%f, Anim=%f, CreateRobj=%f, Load3DAssets=%f\n",

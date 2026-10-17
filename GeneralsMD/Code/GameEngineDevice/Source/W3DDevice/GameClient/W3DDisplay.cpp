@@ -195,6 +195,11 @@ protected:
 //=============================================================================
 StatDumpClass::StatDumpClass( const char *fname )
 {
+#if defined(__ANDROID__)
+	// This is optional diagnostic output. Android has no executable path like GetModuleFileName;
+	// the app's current directory is the SDL writable working directory.
+	m_fp = fopen( fname, "wt" );
+#else
 	char buffer[ _MAX_PATH ];
 	GetModuleFileName( NULL, buffer, sizeof( buffer ) );
 	char *pEnd = buffer + strlen( buffer );
@@ -210,6 +215,7 @@ StatDumpClass::StatDumpClass( const char *fname )
 	AsciiString fullPath;
 	fullPath.format( "%s\\%s", buffer, fname );
 	m_fp = fopen( fullPath.str(), "wt" );
+#endif
 }
 
 //=============================================================================
@@ -4799,7 +4805,7 @@ void dumpMeshAssets(MeshClass *mesh)
 					{
 						if ((texture=model->Peek_Texture(i,pass,stage)) != NULL)
 						{
-							fprintf(AssetDumpFile,"\t%s\n",texture->Get_Texture_Name());
+							fprintf(AssetDumpFile,"\t%s\n",texture->Get_Texture_Name().Peek_Buffer());
 						}
 					}
 				}
@@ -4807,7 +4813,7 @@ void dumpMeshAssets(MeshClass *mesh)
 				{
 					if ((texture=model->Peek_Single_Texture(pass,stage)) != NULL)
 					{
-						fprintf(AssetDumpFile,"\t%s\n",texture->Get_Texture_Name());
+						fprintf(AssetDumpFile,"\t%s\n",texture->Get_Texture_Name().Peek_Buffer());
 					}
 				}
 			}

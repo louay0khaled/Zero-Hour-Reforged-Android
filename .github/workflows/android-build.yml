@@ -1,0 +1,201 @@
+name: Android ARM64 build
+
+on:
+  # Build main directly; feature branches are validated by pull_request below.
+  # Avoid running the same expensive native build twice for each PR commit.
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Do not cancel earlier runs: each attempt must finish and upload diagnostics, even after newer commits.
+
+jobs:
+  assemble-arm64:
+    name: Build arm64-v8a debug APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Initialize diagnostic log directory
+        shell: bash
+        run: |
+          mkdir -p artifacts/ci-logs
+          {
+            echo "Workflow: ${GITHUB_WORKFLOW}"
+            echo "Run ID: ${GITHUB_RUN_ID}"
+            echo "Run attempt: ${GITHUB_RUN_ATTEMPT}"
+            echo "Commit: ${GITHUB_SHA}"
+            echo "Runner: $(uname -a)"
+            echo "Started UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          } | tee artifacts/ci-logs/run-metadata.txt
+
+      - name: Set up Java
+        continue-on-error: true
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Android toolchain
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          mkdir -p artifacts/ci-logs
+          {
+            echo "SDK root: $SDK_ROOT"
+            SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager -perm -u+x | sort -V | tail -n 1)"
+            if [ -z "$SDKMANAGER" ]; then
+              echo "ERROR: sdkmanager was not found under $SDK_ROOT/cmdline-tools" >&2
+              exit 1
+            fi
+            echo "sdkmanager: $SDKMANAGER"
+            echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+            echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+            echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+            echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+            set +o pipefail
+            yes | "$SDKMANAGER" --licenses
+            set -o pipefail
+            "$SDKMANAGER" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.31.6"
+            "$SDKMANAGER" --list_installed
+            java -version
+          } 2>&1 | tee artifacts/ci-logs/android-toolchain.log
+
+      - name: Set up Gradle
+        continue-on-error: true
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Restore vendored source dependencies
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          bash GeneralsMD/Code/Tools/vendor.sh 2>&1 | tee artifacts/ci-logs/vendor.log
+
+      - name: Configure and build APK
+        shell: bash
+        run: |
+          # Ask Gradle to execute every task that does not depend on a failed task. Preserve
+          # the Gradle exit code while allowing the log tee to finish, so diagnostics can run.
+          set +e
+          gradle --no-daemon -p android assembleDebug --continue --console=plain --stacktrace --info 2>&1 | tee artifacts/ci-logs/gradle-assembleDebug.log
+          pipeline_status=("${PIPESTATUS[@]}")
+          gradle_status="${pipeline_status[0]:-1}"
+          tee_status="${pipeline_status[1]:-1}"
+          {
+            echo "Gradle exit code: $gradle_status"
+            echo "Log tee exit code: $tee_status"
+            echo "Gradle continue mode: enabled"
+          } | tee -a artifacts/ci-logs/gradle-assembleDebug.log
+          if [ "$gradle_status" -ne 0 ]; then
+            exit "$gradle_status"
+          fi
+          exit "$tee_status"
+
+      - name: Collect native build diagnostics
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p artifacts/ci-logs/native
+          # Gradle's externalNativeBuild normally lets Ninja stop after a failed command. On a
+          # configured native build, retry with -k 0 so independent C++ files and the linker can
+          # report additional failures in this same workflow run.
+          set +e
+          ninja_bin="$ANDROID_HOME/cmake/3.31.6/bin/ninja"
+          if [ -x "$ninja_bin" ] && [ -d android/app/.cxx ]; then
+            find android/app/.cxx -type f -path '*/arm64-v8a/build.ninja' -print0 2>/dev/null |
+            while IFS= read -r -d '' ninja_file; do
+              build_dir="${ninja_file%/build.ninja}"
+              echo "=== Diagnostic Ninja retry: $build_dir (keep-going unlimited) ===" | tee -a artifacts/ci-logs/ninja-continue.log
+              (cd "$build_dir" && "$ninja_bin" -k 0 generals) 2>&1 | tee -a artifacts/ci-logs/ninja-continue.log
+              ninja_status="${PIPESTATUS[0]:-1}"
+              echo "Diagnostic Ninja exit code: $ninja_status" | tee -a artifacts/ci-logs/ninja-continue.log
+            done
+          else
+            echo "No configured Android Ninja build directory is available for a keep-going retry." | tee artifacts/ci-logs/ninja-continue.log
+          fi
+          set -e
+          {
+            echo "=== Build result context ==="
+            echo "Commit: ${GITHUB_SHA}"
+            echo "Runner: $(uname -a)"
+            echo "Java:"
+            java -version 2>&1 || true
+            echo "Gradle:"
+            gradle --version 2>&1 || true
+            echo "=== Candidate CMake/NDK logs ==="
+            find android/app/.cxx android/.gradle GeneralsMD/Code/build -type f \( -name 'CMakeError.log' -o -name 'CMakeOutput.log' -o -name 'build_output.txt' -o -name '*.log' \) -print 2>/dev/null || true
+          } > artifacts/ci-logs/diagnostic-summary.txt
+          for root in android/app/.cxx android/.gradle GeneralsMD/Code/build; do
+            if [ -d "$root" ]; then
+              find "$root" -type f \( -name 'CMakeError.log' -o -name 'CMakeOutput.log' -o -name 'build_output.txt' -o -name '*.log' \) -print0 2>/dev/null |
+              while IFS= read -r -d '' file; do
+                safe_name="$(printf '%s' "$file" | sed 's#^/##; s#[/ ]#_#g')"
+                cp "$file" "artifacts/ci-logs/native/$safe_name" 2>/dev/null || true
+              done
+            fi
+          done
+          {
+            echo "=== Consolidated error/failure index ==="
+            echo "Generated UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "Source files: Gradle, vendor, toolchain, and collected native logs"
+            for file in artifacts/ci-logs/gradle-assembleDebug.log artifacts/ci-logs/ninja-continue.log artifacts/ci-logs/vendor.log artifacts/ci-logs/android-toolchain.log artifacts/ci-logs/native/*; do
+              [ -f "$file" ] || continue
+              echo
+              echo "--- $file ---"
+              grep -nEi '(^|[[:space:]])(error:|fatal error:)|CMake Error|FAILED|What went wrong|Exception|undefined reference|ld\.lld: error|clang: error|ninja: build stopped|Could not (find|resolve|create)|No such file or directory|BUILD FAILED|FAILURE: Build failed' "$file" || true
+            done
+          } > artifacts/ci-logs/error-index.txt
+          {
+            echo "## Android ARM64 CI diagnostics"
+            echo
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "- Attempt: $GITHUB_RUN_ATTEMPT"
+            echo "- Logs and native diagnostics are uploaded as an artifact even when the build fails."
+            if [ -s android/app/build/outputs/apk/debug/app-debug.apk ]; then
+              echo "- APK file exists: yes"
+              ls -lh android/app/build/outputs/apk/debug/app-debug.apk
+            else
+              echo "- APK file exists: no"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify APK exists
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s android/app/build/outputs/apk/debug/app-debug.apk
+          ls -lh android/app/build/outputs/apk/debug/app-debug.apk | tee artifacts/ci-logs/apk-size.txt
+
+      - name: Upload diagnostic logs (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generals-reforged-android-ci-logs-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: artifacts/ci-logs/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generals-reforged-android-arm64-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14

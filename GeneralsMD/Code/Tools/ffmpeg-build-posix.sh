@@ -48,17 +48,20 @@
 set -euo pipefail
 
 if [ $# -lt 4 ]; then
-  echo "usage: $0 <tarball> <work dir> <install prefix> <C compiler> [<extra cflags> [<target arch>]]" >&2
+  echo "usage: $0 <tarball> <work dir> <install prefix> <C compiler> [<extra cflags> [<target arch> [<target OS>]]]" >&2
   exit 2
 fi
-tarball="$1" work="$2" prefix="$3" cc="$4" extra_cflags="${5:-}" target_arch="${6:-}"
+tarball="$1" work="$2" prefix="$3" cc="$4" extra_cflags="${5:-}" target_arch="${6:-}" target_os="${7:-}"
 
 # A target architecture (FFmpeg's name for it) builds for that one rather than the host's: configure
 # otherwise detects the machine it runs on.  The flags that name it go to the linker too, or
 # configure's own link tests build for the host.
 cross=()
 if [ -n "$target_arch" ]; then
-  cross=(--arch="$target_arch" --enable-cross-compile)
+  cross+=(--arch="$target_arch" --enable-cross-compile)
+fi
+if [ -n "$target_os" ]; then
+  cross+=(--target-os="$target_os")
 fi
 version=8.1.2
 

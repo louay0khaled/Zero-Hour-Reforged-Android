@@ -24,7 +24,16 @@ project(GeneralsMD CXX C)
 # audio, CPU detection) - never for "is this not Windows".  An unported platform-specific file fails
 # with an #error naming what it lacks (cpudetect.cpp does this), which is louder and more useful than
 # refusing to configure.
-if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+if(ANDROID)
+  # This port is deliberately ARM64-only; fail early rather than silently producing an unsupported ABI.
+  if(NOT ANDROID_ABI STREQUAL "arm64-v8a")
+    message(FATAL_ERROR "Android builds support arm64-v8a only; got ANDROID_ABI='${ANDROID_ABI}'.")
+  endif()
+  # Android uses the existing SDL3/POSIX device layer, but has its own lifecycle, storage and
+  # Vulkan loader. Keep it distinct from desktop Linux so no X11/Wayland assumptions leak in.
+  set(ZH_PLATFORM_ANDROID TRUE)
+  set(ZH_PLATFORM_POSIX TRUE)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
   set(ZH_PLATFORM_WINDOWS TRUE)
 else()
   set(ZH_PLATFORM_POSIX TRUE)
@@ -247,6 +256,11 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
   # compile error.  dettrig.h went to integer arithmetic over a committed table for exactly this
   # reason; this is the other half of the same promise, and E1 is the test that holds it.
   add_compile_options(-ffp-contract=off)
+  # Keep fast-math disabled for every Android translation unit, not just the entry-point library:
+  # the simulation code is spread across several static libraries and must share one FP contract.
+  if(ZH_PLATFORM_ANDROID)
+    add_compile_options(-fno-fast-math)
+  endif()
   # -fno-strict-aliasing: 2003 C++.  The .big and .w3d readers cast a byte buffer to a struct
   # pointer and read through it, which the standard does not allow and an optimiser is entitled to
   # act on.  MSVC does no type-based alias analysis, so this code has never been compiled by
@@ -860,7 +874,31 @@ set(GS_OPENSSL          OFF CACHE BOOL "" FORCE)
 set(GS_SECURESECONNECT  OFF CACHE BOOL "" FORCE)
 set(GS_BUILD_TESTS      OFF CACHE BOOL "" FORCE)
 set(GS_INCLUDE_VOICE    OFF CACHE BOOL "" FORCE)
+# GameSpy's top-level "gamespy" target is an aggregate over many component libraries
+# (gspeer, gsserverbrowsing, gschat, etc.). Setting POSITION_INDEPENDENT_CODE only
+# on that aggregate is too late and does not recompile the component objects that are
+# packed into the final archive. Android's shared engine requires every one of those
+# component objects to be PIC. Scope the initialization variable to this subdirectory
+# tree so desktop targets keep their existing compiler flags and behaviour.
+if(ANDROID)
+  if(DEFINED CMAKE_POSITION_INDEPENDENT_CODE)
+    set(_ZH_GAMESPY_SAVED_PIC_DEFINED TRUE)
+    set(_ZH_GAMESPY_SAVED_PIC_VALUE "${CMAKE_POSITION_INDEPENDENT_CODE}")
+  else()
+    set(_ZH_GAMESPY_SAVED_PIC_DEFINED FALSE)
+  endif()
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
 add_subdirectory(${LIBSRC}/GameSpy ${CMAKE_CURRENT_BINARY_DIR}/gamespy)
+if(ANDROID)
+  if(_ZH_GAMESPY_SAVED_PIC_DEFINED)
+    set(CMAKE_POSITION_INDEPENDENT_CODE "${_ZH_GAMESPY_SAVED_PIC_VALUE}")
+  else()
+    unset(CMAKE_POSITION_INDEPENDENT_CODE)
+  endif()
+  unset(_ZH_GAMESPY_SAVED_PIC_DEFINED)
+  unset(_ZH_GAMESPY_SAVED_PIC_VALUE)
+endif()
 
 # ---- SDL3 and miniaudio: the platform layer off Windows (decision 3) -------------------------------
 # Both are fetched by Tools/vendor.sh and neither is fetched on Windows, which keeps Win32Device and
@@ -868,21 +906,36 @@ add_subdirectory(${LIBSRC}/GameSpy ${CMAKE_CURRENT_BINARY_DIR}/gamespy)
 # They are built by default all the same, so that a break shows up in the build that caused it
 # rather than in the first task to link them.
 if(ZH_PLATFORM_POSIX)
-  # SDL3 static, and only the subsystems decision 3 uses.  On: video (window, events, message boxes),
-  # GPU (the renderer - Metal on macOS, Vulkan on Linux) and dialog (the first launch's folder chooser,
+  # SDL3 platform library, and only the subsystems decision 3 uses. On: video (window and events),
+  # GPU (the renderer - Metal on macOS, Vulkan on Linux/Android) and desktop dialog (the first launch's folder chooser,
   # PosixMain.cpp: NSOpenPanel on macOS, the portal or zenity on Linux; with it off, SDL answers every
   # dialog at once with "not built with dialog support", and the chooser quit before showing anything).
   # Off: audio (miniaudio has that job), render (SDL's 2D renderer; D4 uses the GPU API directly),
   # camera, joystick, haptic, hidapi, power, sensor and tray, and the OpenGL/GLES video drivers, which
   # the GPU API does not use.  Tests, examples and install are off.
-  foreach(_sdl_off SDL_SHARED SDL_TEST_LIBRARY SDL_TESTS SDL_EXAMPLES SDL_INSTALL SDL_UNINSTALL
+  foreach(_sdl_off SDL_TEST_LIBRARY SDL_TESTS SDL_EXAMPLES SDL_INSTALL SDL_UNINSTALL
                    SDL_AUDIO SDL_RENDER SDL_CAMERA SDL_JOYSTICK SDL_HAPTIC SDL_HIDAPI SDL_POWER
                    SDL_SENSOR SDL_TRAY SDL_OPENGL SDL_OPENGLES)
     set(${_sdl_off} OFF CACHE BOOL "" FORCE)
   endforeach()
-  foreach(_sdl_on SDL_STATIC SDL_VIDEO SDL_GPU SDL_DIALOG)
+  foreach(_sdl_on SDL_VIDEO SDL_GPU)
     set(${_sdl_on} ON CACHE BOOL "" FORCE)
   endforeach()
+  if(ANDROID)
+    # SDLActivity calls into SDL3's JNI entry points, so Android must load the same shared SDL3
+    # instance that the game links against. Desktop POSIX builds keep the static SDL3 library.
+    set(SDL_SHARED ON CACHE BOOL "" FORCE)
+    set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+    # The desktop install-root chooser uses SDL's file dialog; Android gets a native picker later.
+    set(SDL_DIALOG OFF CACHE BOOL "" FORCE)
+    set(SDL_VULKAN ON CACHE BOOL "" FORCE)
+    set(ZH_SDL3_TARGET SDL3::SDL3-shared)
+  else()
+    set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+    set(SDL_STATIC ON CACHE BOOL "" FORCE)
+    set(SDL_DIALOG ON CACHE BOOL "" FORCE)
+    set(ZH_SDL3_TARGET SDL3::SDL3-static)
+  endif()
   add_subdirectory(${LIBSRC}/SDL3 ${CMAKE_CURRENT_BINARY_DIR}/SDL3)
 
   # miniaudio: one C file.  Its own CMakeLists builds extras and examples this does not want.
@@ -943,7 +996,7 @@ if(ZH_PLATFORM_POSIX)
   # What SDL3's GPU API can do on this machine: the evidence D2 and D5 need before the backend
   # interface is designed.  Needs a GPU and a display, so it is built but not registered with ctest.
   add_executable(sdl_gpu_probe ${CMAKE_CURRENT_SOURCE_DIR}/Tests/sdl_gpu_probe.cpp)
-  target_link_libraries(sdl_gpu_probe PRIVATE SDL3::SDL3-static)
+  target_link_libraries(sdl_gpu_probe PRIVATE ${ZH_SDL3_TARGET})
 
   # The D-spike: one real model and its DDS textures, read from the game's archives, drawn through
   # SDL3's GPU API.  Parses W3D with WWLib's chunkio and w3d_file.h; WW3D2 itself is not built.  Needs
@@ -961,7 +1014,7 @@ if(ZH_PLATFORM_POSIX)
     ${WW}/WW3D2 ${WW}/WWLib ${WW}/WWMath ${WW}/WWDebug)
   # --shaders generated draws with the game's own generated programs, compiled as the SDL3 backend
   # will compile them (D3).
-  target_link_libraries(w3d_view PRIVATE SDL3::SDL3-static wwmath wwlib wwsaveload wwdebug
+  target_link_libraries(w3d_view PRIVATE ${ZH_SDL3_TARGET} wwmath wwlib wwsaveload wwdebug
     ffvertex engineshader sdl3shadercompile)
 endif()
 
@@ -1006,12 +1059,12 @@ if(ZH_PLATFORM_POSIX)
   # wrote.  DXIL (and so DXC) is not used.
   add_library(sdl3_shadercross STATIC ${LIBSRC}/SDL_shadercross/src/SDL_shadercross.c)
   target_include_directories(sdl3_shadercross PUBLIC ${LIBSRC}/SDL_shadercross/include)
-  target_link_libraries(sdl3_shadercross PUBLIC SDL3::SDL3-static PRIVATE spirv-cross-c)
+  target_link_libraries(sdl3_shadercross PUBLIC ${ZH_SDL3_TARGET} PRIVATE spirv-cross-c)
 
   # HLSL to SPIR-V to what a device takes, behind the one function that names the HLSL front end.
   add_library(sdl3shadercompile STATIC ${WW}/WW3D2/sdl3shadercompile.cpp)
   target_include_directories(sdl3shadercompile PUBLIC ${WW}/WW3D2)
-  target_link_libraries(sdl3shadercompile PUBLIC SDL3::SDL3-static
+  target_link_libraries(sdl3shadercompile PUBLIC ${ZH_SDL3_TARGET}
     PRIVATE sdl3_shadercross glslang::glslang glslang::glslang-default-resource-limits)
 
 endif()
@@ -1106,6 +1159,22 @@ endif()
 # build_fingerprint_manifest checks it), line endings normalised.  The header is rewritten only when the
 # value changes, so a rebuild with nothing changed runs nothing and recompiles nothing.
 add_executable(build_fingerprint ${CMAKE_CURRENT_SOURCE_DIR}/Tools/fingerprint/build_fingerprint.cpp)
+set(ZH_FINGERPRINT_TOOL build_fingerprint)
+if(ZH_PLATFORM_ANDROID)
+  # The Android toolchain cross-compiles build_fingerprint for ARM64, but this custom command must
+  # execute a host binary while generating BuildFingerprint.h. Build a tiny host-side copy separately.
+  find_program(ZH_HOST_CXX NAMES c++ g++ clang++ REQUIRED)
+  set(ZH_FINGERPRINT_TOOL ${CMAKE_CURRENT_BINARY_DIR}/host-tools/build_fingerprint)
+  add_custom_command(
+    OUTPUT ${ZH_FINGERPRINT_TOOL}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/host-tools
+    COMMAND ${ZH_HOST_CXX} -std=c++17 -O2
+            ${CMAKE_CURRENT_SOURCE_DIR}/Tools/fingerprint/build_fingerprint.cpp
+            -o ${ZH_FINGERPRINT_TOOL}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/Tools/fingerprint/build_fingerprint.cpp
+    COMMENT "Build host-side fingerprint tool for Android cross-compilation" VERBATIM)
+  add_custom_target(build_fingerprint_host DEPENDS ${ZH_FINGERPRINT_TOOL})
+endif()
 set(ZH_FINGERPRINT_MANIFEST ${CMAKE_CURRENT_SOURCE_DIR}/BuildFingerprint.manifest)
 set(ZH_FINGERPRINT_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated/fingerprint)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${ZH_FINGERPRINT_MANIFEST})
@@ -1115,9 +1184,9 @@ add_custom_command(
   OUTPUT ${ZH_FINGERPRINT_DIR}/BuildFingerprint.stamp
   BYPRODUCTS ${ZH_FINGERPRINT_DIR}/BuildFingerprint.h
   COMMAND ${CMAKE_COMMAND} -E make_directory ${ZH_FINGERPRINT_DIR}
-  COMMAND build_fingerprint ${CMAKE_CURRENT_SOURCE_DIR} ${ZH_FINGERPRINT_MANIFEST} ${ZH_FINGERPRINT_DIR}/BuildFingerprint.h
+  COMMAND ${ZH_FINGERPRINT_TOOL} ${CMAKE_CURRENT_SOURCE_DIR} ${ZH_FINGERPRINT_MANIFEST} ${ZH_FINGERPRINT_DIR}/BuildFingerprint.h
   COMMAND ${CMAKE_COMMAND} -E touch ${ZH_FINGERPRINT_DIR}/BuildFingerprint.stamp
-  DEPENDS build_fingerprint ${ZH_FINGERPRINT_MANIFEST} ${ZH_FINGERPRINT_FILES}
+  DEPENDS ${ZH_FINGERPRINT_TOOL} ${ZH_FINGERPRINT_MANIFEST} ${ZH_FINGERPRINT_FILES}
   COMMENT "Build fingerprint over the tracked sources (N1)" VERBATIM)
 add_custom_target(build_fingerprint_header DEPENDS ${ZH_FINGERPRINT_DIR}/BuildFingerprint.stamp)
 add_dependencies(gameengine build_fingerprint_header)
@@ -1403,7 +1472,7 @@ if(ZH_PLATFORM_POSIX)
   target_include_directories(posixd3d9 PUBLIC ${ZH_POSIX_D3D9_INCLUDE})
   # A3: with a window the device draws through SDL3 GPU, and compiles its own small programs (the gamma
   # pass) the way the generated ones are compiled.
-  target_link_libraries(posixd3d9 PRIVATE SDL3::SDL3-static sdl3shadercompile engineshader ffshader ffvertex)
+  target_link_libraries(posixd3d9 PRIVATE ${ZH_SDL3_TARGET} sdl3shadercompile engineshader ffshader ffvertex)
 
   # A3a's frame: a clear read back, and the gamma pass through a picture that shows any flip.  Needs a GPU
   # but no window; exits 77 (skipped, and ctest says so) where SDL has no GPU device to give.
@@ -1411,7 +1480,7 @@ if(ZH_PLATFORM_POSIX)
   set_target_properties(sdl_gpu_frame_selfcheck PROPERTIES CXX_STANDARD 17)
   target_include_directories(sdl_gpu_frame_selfcheck PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/GameEngineDevice/Source/PosixDevice/Render)
-  target_link_libraries(sdl_gpu_frame_selfcheck PRIVATE posixd3d9 SDL3::SDL3-static)
+  target_link_libraries(sdl_gpu_frame_selfcheck PRIVATE posixd3d9 ${ZH_SDL3_TARGET})
   add_test(NAME sdl_gpu_frame_selfcheck COMMAND sdl_gpu_frame_selfcheck)
 
   # A3c's resolve: the device's state into the generators' descriptions and the constants their
@@ -1429,7 +1498,7 @@ if(ZH_PLATFORM_POSIX)
   set_target_properties(sdl_program_cache_selfcheck PROPERTIES CXX_STANDARD 17)
   target_include_directories(sdl_program_cache_selfcheck PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/GameEngineDevice/Source/PosixDevice/Render)
-  target_link_libraries(sdl_program_cache_selfcheck PRIVATE posixd3d9 ffshader ffvertex SDL3::SDL3-static)
+  target_link_libraries(sdl_program_cache_selfcheck PRIVATE posixd3d9 ffshader ffvertex ${ZH_SDL3_TARGET})
   add_test(NAME sdl_program_cache_selfcheck COMMAND sdl_program_cache_selfcheck)
   set_tests_properties(sdl_program_cache_selfcheck PROPERTIES SKIP_RETURN_CODE 77)
 
@@ -1439,7 +1508,7 @@ if(ZH_PLATFORM_POSIX)
   set_target_properties(sdl_pipeline_state_selfcheck PROPERTIES CXX_STANDARD 17)
   target_include_directories(sdl_pipeline_state_selfcheck PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/GameEngineDevice/Source/PosixDevice/Render ${WW}/WWLib ${WW}/WWDebug ${WW}/WWMath)
-  target_link_libraries(sdl_pipeline_state_selfcheck PRIVATE posixd3d9 d3dx9runtime ffshader ffvertex SDL3::SDL3-static)
+  target_link_libraries(sdl_pipeline_state_selfcheck PRIVATE posixd3d9 d3dx9runtime ffshader ffvertex ${ZH_SDL3_TARGET})
   add_test(NAME sdl_pipeline_state_selfcheck COMMAND sdl_pipeline_state_selfcheck)
   set_tests_properties(sdl_pipeline_state_selfcheck PROPERTIES SKIP_RETURN_CODE 77)
 
@@ -1448,7 +1517,7 @@ if(ZH_PLATFORM_POSIX)
   add_executable(posix_gpu_draw_selfcheck ${CMAKE_CURRENT_SOURCE_DIR}/Tests/test_posix_gpu_draw.cpp)
   set_target_properties(posix_gpu_draw_selfcheck PROPERTIES CXX_STANDARD 17)
   target_include_directories(posix_gpu_draw_selfcheck PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/GameEngineDevice/Source/PosixDevice/Render)
-  target_link_libraries(posix_gpu_draw_selfcheck PRIVATE posixd3d9 SDL3::SDL3-static)
+  target_link_libraries(posix_gpu_draw_selfcheck PRIVATE posixd3d9 ${ZH_SDL3_TARGET})
   add_test(NAME posix_gpu_draw_selfcheck COMMAND posix_gpu_draw_selfcheck)
   set_tests_properties(posix_gpu_draw_selfcheck PROPERTIES SKIP_RETURN_CODE 77)
 
@@ -1457,7 +1526,7 @@ if(ZH_PLATFORM_POSIX)
   add_executable(ffref_gpu_selfcheck ${CMAKE_CURRENT_SOURCE_DIR}/Tests/test_ffref_gpu.cpp)
   set_target_properties(ffref_gpu_selfcheck PROPERTIES CXX_STANDARD 17)
   target_include_directories(ffref_gpu_selfcheck PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/GameEngineDevice/Source/PosixDevice/Render)
-  target_link_libraries(ffref_gpu_selfcheck PRIVATE posixd3d9 ffreference SDL3::SDL3-static)
+  target_link_libraries(ffref_gpu_selfcheck PRIVATE posixd3d9 ffreference ${ZH_SDL3_TARGET})
   add_test(NAME ffref_gpu_selfcheck COMMAND ffref_gpu_selfcheck)
   set_tests_properties(ffref_gpu_selfcheck PROPERTIES SKIP_RETURN_CODE 77)
 
@@ -1466,7 +1535,7 @@ if(ZH_PLATFORM_POSIX)
   add_executable(ffref_capture_selfcheck ${CMAKE_CURRENT_SOURCE_DIR}/Tests/test_ffref_capture.cpp)
   set_target_properties(ffref_capture_selfcheck PROPERTIES CXX_STANDARD 17)
   target_include_directories(ffref_capture_selfcheck PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/GameEngineDevice/Source/PosixDevice/Render)
-  target_link_libraries(ffref_capture_selfcheck PRIVATE posixd3d9 ffreference SDL3::SDL3-static)
+  target_link_libraries(ffref_capture_selfcheck PRIVATE posixd3d9 ffreference ${ZH_SDL3_TARGET})
   add_test(NAME ffref_capture_selfcheck COMMAND ffref_capture_selfcheck)
   set_tests_properties(ffref_capture_selfcheck PROPERTIES SKIP_RETURN_CODE 77)
   set_tests_properties(sdl_gpu_frame_selfcheck PROPERTIES SKIP_RETURN_CODE 77)
@@ -1525,10 +1594,24 @@ if(ZH_PLATFORM_POSIX)
   if(APPLE AND CMAKE_OSX_SYSROOT)
     set(FFMPEG_POSIX_ENV "SDKROOT=${CMAKE_OSX_SYSROOT}")
   endif()
-  # FFmpeg's own configure picks the host's architecture, so a build for another one (x86_64 on Apple
-  # Silicon, run under Rosetta: E1's architecture axis) names it.  One at a time: configure builds one.
+  # FFmpeg's own configure picks the host's architecture, so a build for another one names it.
+  # One at a time: configure builds one. Android also needs its target OS and NDK sysroot explicitly:
+  # this script invokes FFmpeg's configure directly, outside CMake's compiler-driver wrapper.
   set(FFMPEG_POSIX_ARCH "")
-  if(APPLE AND CMAKE_OSX_ARCHITECTURES)
+  set(FFMPEG_POSIX_OS "")
+  if(ANDROID)
+    set(FFMPEG_POSIX_ARCH aarch64)
+    set(FFMPEG_POSIX_OS android)
+    if(CMAKE_C_COMPILER_TARGET)
+      set(FFMPEG_ANDROID_TARGET "${CMAKE_C_COMPILER_TARGET}")
+    else()
+      set(FFMPEG_ANDROID_TARGET "aarch64-linux-android${CMAKE_SYSTEM_VERSION}")
+    endif()
+    if(NOT CMAKE_SYSROOT)
+      message(FATAL_ERROR "Android FFmpeg cross-build requires the NDK CMAKE_SYSROOT.")
+    endif()
+    set(FFMPEG_POSIX_CFLAGS "--target=${FFMPEG_ANDROID_TARGET} --sysroot=${CMAKE_SYSROOT}")
+  elseif(APPLE AND CMAKE_OSX_ARCHITECTURES)
     list(LENGTH CMAKE_OSX_ARCHITECTURES FFMPEG_ARCH_COUNT)
     if(NOT FFMPEG_ARCH_COUNT EQUAL 1)
       message(FATAL_ERROR "FFmpeg builds one architecture at a time; CMAKE_OSX_ARCHITECTURES is '${CMAKE_OSX_ARCHITECTURES}'.")
@@ -1545,7 +1628,7 @@ if(ZH_PLATFORM_POSIX)
     COMMAND ${CMAKE_COMMAND} -E env ${FFMPEG_POSIX_ENV}
             ${CMAKE_CURRENT_SOURCE_DIR}/Tools/ffmpeg-build-posix.sh ${FFMPEG_TARBALL}
             ${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-work ${FFMPEG_POSIX} ${CMAKE_C_COMPILER} "${FFMPEG_POSIX_CFLAGS}"
-            "${FFMPEG_POSIX_ARCH}"
+            "${FFMPEG_POSIX_ARCH}" "${FFMPEG_POSIX_OS}"
     DEPENDS ${FFMPEG_TARBALL} ${CMAKE_CURRENT_SOURCE_DIR}/Tools/ffmpeg-build-posix.sh
     COMMENT "Building FFmpeg 8.1.2's Bink decoders for the movies (V1)"
     VERBATIM)
@@ -1825,7 +1908,7 @@ if(ZH_PLATFORM_POSIX)
   add_library(sdlinput STATIC ${SDLINPUT_SOURCES})
   target_include_directories(sdlinput PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/GameEngineDevice/Include)
   set_target_properties(sdlinput PROPERTIES CXX_STANDARD 17)
-  target_link_libraries(sdlinput PUBLIC gameengine SDL3::SDL3-static)
+  target_link_libraries(sdlinput PUBLIC gameengine ${ZH_SDL3_TARGET})
 
   file(GLOB_RECURSE SDLDEVICE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/GameEngineDevice/Source/SdlDevice/*.cpp)
   list(FILTER SDLDEVICE_SOURCES EXCLUDE REGEX "/SdlDevice/GameClient/")
@@ -1833,15 +1916,28 @@ if(ZH_PLATFORM_POSIX)
   target_include_directories(sdldevice PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/GameEngineDevice/Include
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Stubs)
   set_target_properties(sdldevice PROPERTIES CXX_STANDARD 17)
-  target_link_libraries(sdldevice PUBLIC posixdevice w3ddevice SDL3::SDL3-static milesaudiomanager sdlinput)
+  target_link_libraries(sdldevice PUBLIC posixdevice w3ddevice ${ZH_SDL3_TARGET} milesaudiomanager sdlinput)
   if(APPLE)
     target_link_libraries(sdldevice PRIVATE "-framework CoreGraphics")		# SdlDisplays' panel size
   endif()
 
-  add_executable(generals ${CMAKE_CURRENT_SOURCE_DIR}/Main/PosixMain.cpp)
+  if(ANDROID)
+    # SDLActivity loads SDL3 first and calls SDL_main in this shared object.
+    add_library(generals SHARED ${CMAKE_CURRENT_SOURCE_DIR}/Main/PosixMain.cpp)
+    set_target_properties(generals PROPERTIES
+      CXX_STANDARD 17
+      OUTPUT_NAME GeneralsReforged)
+    find_library(ZH_ANDROID_LIB android REQUIRED)
+    find_library(ZH_ANDROID_LOG_LIB log REQUIRED)
+    find_library(ZH_ANDROID_VULKAN_LIB vulkan REQUIRED)
+    target_link_libraries(generals PRIVATE sdldevice installroot
+      ${ZH_ANDROID_LIB} ${ZH_ANDROID_LOG_LIB} ${ZH_ANDROID_VULKAN_LIB})
+  else()
+    add_executable(generals ${CMAKE_CURRENT_SOURCE_DIR}/Main/PosixMain.cpp)
+    set_target_properties(generals PROPERTIES CXX_STANDARD 17)
+    target_link_libraries(generals PRIVATE sdldevice installroot)
+  endif()
   target_include_directories(generals PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Main ${GENERATED})
-  set_target_properties(generals PROPERTIES CXX_STANDARD 17)
-  target_link_libraries(generals PRIVATE sdldevice installroot)
   # C2's SDL side of Monitors.h and MessageBoxWrapper, on SDL's offscreen video driver.
   # test_gameengine_stubs.cpp: the names the executable supplies, which GCC's larger pull from sdldevice
   # reaches (ld.lld, L1b); clang's does not, and they cost nothing there.

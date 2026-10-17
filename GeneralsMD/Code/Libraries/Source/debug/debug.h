@@ -22,7 +22,7 @@
 // $Revision: #1 $
 // $DateTime: 2003/07/03 11:55:26 $
 //
-// ©2003 Electronic Arts
+// Â©2003 Electronic Arts
 //
 // Debugging module
 //////////////////////////////////////////////////////////////////////////////
@@ -90,22 +90,30 @@
 
 // Define which libraries to use. 
 #if defined(_INTERNAL)
+#  if defined(_MSC_VER)
 #  pragma comment (lib,"debuginternal.lib")
+#  endif
 #  define HAS_ASSERTS
 #  define HAS_LOGS
 #  define HAS_OPT
 #elif defined(_DEBUG)
+#  if defined(_MSC_VER)
 #  pragma comment (lib,"debugdebug.lib")
+#  endif
 #  define HAS_ASSERTS
 #  define HAS_LOGS
 #elif defined(_PROFILE)
+#  if defined(_MSC_VER)
 #  pragma comment (lib,"debugprofile.lib")
+#  endif
 #  define HAS_ASSERTS
 #  define HAS_LOGS
 #  define HAS_OPT
 #  define HAS_PROFILE
 #else
+#  if defined(_MSC_VER)
 #  pragma comment (lib,"debug.lib")
+#  endif
 #  define HAS_OPT
 #endif
 

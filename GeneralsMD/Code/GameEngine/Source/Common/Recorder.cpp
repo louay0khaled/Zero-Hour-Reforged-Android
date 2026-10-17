@@ -50,6 +50,31 @@
 #include "Common/CRCDebug.h"
 #include "Common/version.h"
 
+#if !defined(_WIN32)
+#include <unistd.h>
+#endif
+
+#if defined(_WIN32)
+enum { RECORDER_COMPUTER_NAME_CAPACITY = MAX_COMPUTERNAME_LENGTH + 1 };
+#else
+enum { RECORDER_COMPUTER_NAME_CAPACITY = 256 };
+#endif
+
+static bool recorderGetComputerName(char *buffer, size_t capacity)
+{
+	if (buffer == NULL || capacity == 0)
+		return false;
+#if defined(_WIN32)
+	unsigned long length = (unsigned long)capacity;
+	return GetComputerName(buffer, &length) != 0;
+#else
+	if (gethostname(buffer, capacity) != 0)
+		return false;
+	buffer[capacity - 1] = '\0';
+	return true;
+#endif
+}
+
 #ifdef _INTERNAL
 // for occasional debugging...
 //#pragma optimize("", off)
@@ -94,9 +119,8 @@ void RecorderClass::logGameStart(AsciiString options)
 	{
 		//if (TheLAN)
 		{
-			unsigned long bufSize = MAX_COMPUTERNAME_LENGTH + 1;
-			char computerName[MAX_COMPUTERNAME_LENGTH + 1];
-			if (!GetComputerName(computerName, &bufSize))
+			char computerName[RECORDER_COMPUTER_NAME_CAPACITY];
+			if (!recorderGetComputerName(computerName, sizeof(computerName)))
 			{
 				strcpy(computerName, "unknown");
 			}
@@ -153,9 +177,8 @@ void RecorderClass::logPlayerDisconnect(UnicodeString player, Int slot)
 #if defined(_DEBUG) || defined(_INTERNAL)
 	if (TheGlobalData->m_saveStats)
 	{
-		unsigned long bufSize = MAX_COMPUTERNAME_LENGTH + 1;
-		char computerName[MAX_COMPUTERNAME_LENGTH + 1];
-		if (!GetComputerName(computerName, &bufSize))
+		char computerName[RECORDER_COMPUTER_NAME_CAPACITY];
+		if (!recorderGetComputerName(computerName, sizeof(computerName)))
 		{
 			strcpy(computerName, "unknown");
 		}
@@ -199,9 +222,8 @@ void RecorderClass::logCRCMismatch( void )
 	if (TheGlobalData->m_saveStats)
 	{
 		m_wasDesync = TRUE;
-		unsigned long bufSize = MAX_COMPUTERNAME_LENGTH + 1;
-		char computerName[MAX_COMPUTERNAME_LENGTH + 1];
-		if (!GetComputerName(computerName, &bufSize))
+		char computerName[RECORDER_COMPUTER_NAME_CAPACITY];
+		if (!recorderGetComputerName(computerName, sizeof(computerName)))
 		{
 			strcpy(computerName, "unknown");
 		}
@@ -254,9 +276,8 @@ void RecorderClass::logGameEnd( void )
 	{
 		//if (TheLAN)
 		{
-			unsigned long bufSize = MAX_COMPUTERNAME_LENGTH + 1;
-			char computerName[MAX_COMPUTERNAME_LENGTH + 1];
-			if (!GetComputerName(computerName, &bufSize))
+			char computerName[RECORDER_COMPUTER_NAME_CAPACITY];
+			if (!recorderGetComputerName(computerName, sizeof(computerName)))
 			{
 				strcpy(computerName, "unknown");
 			}

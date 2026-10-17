@@ -42,9 +42,11 @@
 
 #include <SDL3/SDL.h>
 
+#if !defined(__ANDROID__)
 #include <cxxabi.h>
 #include <dlfcn.h>
 #include <execinfo.h>
+#endif
 #include <mutex>
 #include <string>
 
@@ -265,6 +267,12 @@ void Sdl_Creation_Log(const char *what, double started_ms, double took_ms, const
 
 void Sdl_Creation_Log_Trace(const char *what)
 {
+#if defined(__ANDROID__)
+	// Android's NDK does not expose execinfo's backtrace() API. Keep the diagnostic hook harmless
+	// and explicit on Android rather than making the entire native engine fail to compile.
+	const std::string line = std::string("PosixDevice9 create: trace ") + what + ": stack trace unavailable on Android";
+	Sdl_Creation_Log_Line(line.c_str());
+#else
 	void *frames[12];
 	const int count = backtrace(frames, 12);
 	std::string line = std::string("PosixDevice9 create: trace ") + what + ":";
@@ -288,6 +296,7 @@ void Sdl_Creation_Log_Trace(const char *what)
 		free(demangled);
 	}
 	Sdl_Creation_Log_Line(line.c_str());
+#endif
 }
 
 void Sdl_Creation_Log_Flush()
