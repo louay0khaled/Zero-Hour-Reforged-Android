@@ -874,12 +874,30 @@ set(GS_OPENSSL          OFF CACHE BOOL "" FORCE)
 set(GS_SECURESECONNECT  OFF CACHE BOOL "" FORCE)
 set(GS_BUILD_TESTS      OFF CACHE BOOL "" FORCE)
 set(GS_INCLUDE_VOICE    OFF CACHE BOOL "" FORCE)
-add_subdirectory(${LIBSRC}/GameSpy ${CMAKE_CURRENT_BINARY_DIR}/gamespy)
-# Android links the engine as a shared object. GameSpy's static archive otherwise contains
-# non-PIC AArch64 relocations, which lld rejects when producing libGeneralsReforged.so.
-# Keep this target-specific so desktop builds retain their existing flags and behaviour.
+# GameSpy's top-level "gamespy" target is an aggregate over many component libraries
+# (gspeer, gsserverbrowsing, gschat, etc.). Setting POSITION_INDEPENDENT_CODE only
+# on that aggregate is too late and does not recompile the component objects that are
+# packed into the final archive. Android's shared engine requires every one of those
+# component objects to be PIC. Scope the initialization variable to this subdirectory
+# tree so desktop targets keep their existing compiler flags and behaviour.
 if(ANDROID)
-  set_target_properties(gamespy PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  if(DEFINED CMAKE_POSITION_INDEPENDENT_CODE)
+    set(_ZH_GAMESPY_SAVED_PIC_DEFINED TRUE)
+    set(_ZH_GAMESPY_SAVED_PIC_VALUE "${CMAKE_POSITION_INDEPENDENT_CODE}")
+  else()
+    set(_ZH_GAMESPY_SAVED_PIC_DEFINED FALSE)
+  endif()
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+add_subdirectory(${LIBSRC}/GameSpy ${CMAKE_CURRENT_BINARY_DIR}/gamespy)
+if(ANDROID)
+  if(_ZH_GAMESPY_SAVED_PIC_DEFINED)
+    set(CMAKE_POSITION_INDEPENDENT_CODE "${_ZH_GAMESPY_SAVED_PIC_VALUE}")
+  else()
+    unset(CMAKE_POSITION_INDEPENDENT_CODE)
+  endif()
+  unset(_ZH_GAMESPY_SAVED_PIC_DEFINED)
+  unset(_ZH_GAMESPY_SAVED_PIC_VALUE)
 endif()
 
 # ---- SDL3 and miniaudio: the platform layer off Windows (decision 3) -------------------------------
