@@ -10,6 +10,7 @@ repository.
 
 - Android SDK with platform 35 and Build Tools installed
 - Android NDK **28.2.13676358** (r28c)
+- Minimum Android API **28 (Android 9)** for the current POSIX install-root code (`glob`/`globfree`); the Android-specific storage resolver can lower this later.
 - CMake 3.22.1
 - JDK 17 and Gradle 8.9 (Android Gradle Plugin 8.7.3)
 
