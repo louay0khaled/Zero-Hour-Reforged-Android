@@ -32,7 +32,7 @@ android {
 
     defaultConfig {
         applicationId = "org.reforged.generals"
-        minSdk = 24 // Vulkan is available from Android 7.0 / API 24.
+        minSdk = 28 // PosixInstallRoot currently uses glob/globfree, introduced in Android API 28.
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
@@ -45,7 +45,7 @@ android {
             cmake {
                 arguments += listOf(
                     "-DANDROID_STL=c++_shared",
-                    "-DANDROID_PLATFORM=android-24"
+                    "-DANDROID_PLATFORM=android-28"
                 )
                 targets += listOf("generals")
             }
