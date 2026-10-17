@@ -1135,6 +1135,22 @@ endif()
 # build_fingerprint_manifest checks it), line endings normalised.  The header is rewritten only when the
 # value changes, so a rebuild with nothing changed runs nothing and recompiles nothing.
 add_executable(build_fingerprint ${CMAKE_CURRENT_SOURCE_DIR}/Tools/fingerprint/build_fingerprint.cpp)
+set(ZH_FINGERPRINT_TOOL build_fingerprint)
+if(ZH_PLATFORM_ANDROID)
+  # The Android toolchain cross-compiles build_fingerprint for ARM64, but this custom command must
+  # execute a host binary while generating BuildFingerprint.h. Build a tiny host-side copy separately.
+  find_program(ZH_HOST_CXX NAMES c++ g++ clang++ REQUIRED)
+  set(ZH_FINGERPRINT_TOOL ${CMAKE_CURRENT_BINARY_DIR}/host-tools/build_fingerprint)
+  add_custom_command(
+    OUTPUT ${ZH_FINGERPRINT_TOOL}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/host-tools
+    COMMAND ${ZH_HOST_CXX} -std=c++17 -O2
+            ${CMAKE_CURRENT_SOURCE_DIR}/Tools/fingerprint/build_fingerprint.cpp
+            -o ${ZH_FINGERPRINT_TOOL}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/Tools/fingerprint/build_fingerprint.cpp
+    COMMENT "Build host-side fingerprint tool for Android cross-compilation" VERBATIM)
+  add_custom_target(build_fingerprint_host DEPENDS ${ZH_FINGERPRINT_TOOL})
+endif()
 set(ZH_FINGERPRINT_MANIFEST ${CMAKE_CURRENT_SOURCE_DIR}/BuildFingerprint.manifest)
 set(ZH_FINGERPRINT_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated/fingerprint)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${ZH_FINGERPRINT_MANIFEST})
@@ -1144,9 +1160,9 @@ add_custom_command(
   OUTPUT ${ZH_FINGERPRINT_DIR}/BuildFingerprint.stamp
   BYPRODUCTS ${ZH_FINGERPRINT_DIR}/BuildFingerprint.h
   COMMAND ${CMAKE_COMMAND} -E make_directory ${ZH_FINGERPRINT_DIR}
-  COMMAND build_fingerprint ${CMAKE_CURRENT_SOURCE_DIR} ${ZH_FINGERPRINT_MANIFEST} ${ZH_FINGERPRINT_DIR}/BuildFingerprint.h
+  COMMAND ${ZH_FINGERPRINT_TOOL} ${CMAKE_CURRENT_SOURCE_DIR} ${ZH_FINGERPRINT_MANIFEST} ${ZH_FINGERPRINT_DIR}/BuildFingerprint.h
   COMMAND ${CMAKE_COMMAND} -E touch ${ZH_FINGERPRINT_DIR}/BuildFingerprint.stamp
-  DEPENDS build_fingerprint ${ZH_FINGERPRINT_MANIFEST} ${ZH_FINGERPRINT_FILES}
+  DEPENDS ${ZH_FINGERPRINT_TOOL} ${ZH_FINGERPRINT_MANIFEST} ${ZH_FINGERPRINT_FILES}
   COMMENT "Build fingerprint over the tracked sources (N1)" VERBATIM)
 add_custom_target(build_fingerprint_header DEPENDS ${ZH_FINGERPRINT_DIR}/BuildFingerprint.stamp)
 add_dependencies(gameengine build_fingerprint_header)
