@@ -32,6 +32,8 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
+          set -o pipefail
+          {
           pattern='^((feat|fix|perf|build|refactor|test)\([a-z0-9._-]+\)|docs(\([a-z0-9._-]+\))?): [^ ]'
           status=0
           while IFS= read -r line; do
