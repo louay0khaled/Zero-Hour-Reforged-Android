@@ -276,9 +276,8 @@ void RecorderClass::logGameEnd( void )
 	{
 		//if (TheLAN)
 		{
-			unsigned long bufSize = MAX_COMPUTERNAME_LENGTH + 1;
-			char computerName[MAX_COMPUTERNAME_LENGTH + 1];
-			if (!GetComputerName(computerName, &bufSize))
+			char computerName[RECORDER_COMPUTER_NAME_CAPACITY];
+			if (!recorderGetComputerName(computerName, sizeof(computerName)))
 			{
 				strcpy(computerName, "unknown");
 			}
