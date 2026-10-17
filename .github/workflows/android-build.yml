@@ -109,6 +109,24 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifacts/ci-logs/native
+          # Gradle's externalNativeBuild normally lets Ninja stop after a failed command. On a
+          # configured native build, retry with -k 0 so independent C++ files and the linker can
+          # report additional failures in this same workflow run.
+          set +e
+          ninja_bin="$ANDROID_HOME/cmake/3.31.6/bin/ninja"
+          if [ -x "$ninja_bin" ] && [ -d android/app/.cxx ]; then
+            find android/app/.cxx -type f -path '*/arm64-v8a/build.ninja' -print0 2>/dev/null |
+            while IFS= read -r -d '' ninja_file; do
+              build_dir="${ninja_file%/build.ninja}"
+              echo "=== Diagnostic Ninja retry: $build_dir (keep-going unlimited) ===" | tee -a artifacts/ci-logs/ninja-continue.log
+              (cd "$build_dir" && "$ninja_bin" -k 0 generals) 2>&1 | tee -a artifacts/ci-logs/ninja-continue.log
+              ninja_status="${PIPESTATUS[0]:-1}"
+              echo "Diagnostic Ninja exit code: $ninja_status" | tee -a artifacts/ci-logs/ninja-continue.log
+            done
+          else
+            echo "No configured Android Ninja build directory is available for a keep-going retry." | tee artifacts/ci-logs/ninja-continue.log
+          fi
+          set -e
           {
             echo "=== Build result context ==="
             echo "Commit: ${GITHUB_SHA}"
