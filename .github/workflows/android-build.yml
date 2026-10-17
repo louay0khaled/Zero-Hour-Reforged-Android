@@ -118,11 +118,11 @@ jobs:
             echo "Gradle:"
             gradle --version 2>&1 || true
             echo "=== Candidate CMake/NDK logs ==="
-            find android/app/.cxx android/.gradle GeneralsMD/Code/build -type f \\( -name 'CMakeError.log' -o -name 'CMakeOutput.log' -o -name 'build_output.txt' -o -name '*.log' \\) -print 2>/dev/null || true
+            find android/app/.cxx android/.gradle GeneralsMD/Code/build -type f \( -name 'CMakeError.log' -o -name 'CMakeOutput.log' -o -name 'build_output.txt' -o -name '*.log' \) -print 2>/dev/null || true
           } > artifacts/ci-logs/diagnostic-summary.txt
           for root in android/app/.cxx android/.gradle GeneralsMD/Code/build; do
             if [ -d "$root" ]; then
-              find "$root" -type f \\( -name 'CMakeError.log' -o -name 'CMakeOutput.log' -o -name 'build_output.txt' -o -name '*.log' \\) -print0 2>/dev/null |
+              find "$root" -type f \( -name 'CMakeError.log' -o -name 'CMakeOutput.log' -o -name 'build_output.txt' -o -name '*.log' \) -print0 2>/dev/null |
               while IFS= read -r -d '' file; do
                 safe_name="$(printf '%s' "$file" | sed 's#^/##; s#[/ ]#_#g')"
                 cp "$file" "artifacts/ci-logs/native/$safe_name" 2>/dev/null || true
