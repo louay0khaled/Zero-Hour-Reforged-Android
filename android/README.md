@@ -1,7 +1,7 @@
 # Android ARM64 bootstrap
 
 This directory is the initial Android/Gradle integration for the native SDL3 port. It targets **only**
-`arm64-v8a`, pins Android NDK r26c, and asks CMake to build the existing `generals` target as
+`arm64-v8a`, pins Android NDK r28c, and asks CMake to build the existing `generals` target as
 `libGeneralsReforged.so`. SDL3's Android Java sources and resources are taken from the exact SDL3
 source archive pinned by `GeneralsMD/Code/Tools/vendor.sh`; third-party source is not copied into this
 repository.
@@ -9,7 +9,7 @@ repository.
 ## Prerequisites
 
 - Android SDK with platform 35 and Build Tools installed
-- Android NDK **26.2.11394342** (r26c)
+- Android NDK **28.2.13676358** (r26c)
 - CMake 3.22.1
 - JDK 17 and Gradle 8.9 (Android Gradle Plugin 8.7.3)
 
